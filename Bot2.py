@@ -439,29 +439,33 @@ async def handle_photos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text("⚠️ Error al preparar la carpeta destino. Usa /start")
         return SELECTING_PHOTOS
 
-    for photo in update.message.photo:
-        unique_id = photo.file_unique_id
-        if unique_id in context.user_data['fotos']:
-            continue
-        
-        try:
-            file = await context.bot.get_file(photo.file_id)
-            file_name = f"{unique_id}.jpg"
-            file_path = os.path.join(photo_dir, file_name)
+    # Selecciona solo la foto de mayor resolución (última en la lista)
+    photo = update.message.photo[-1]
+    unique_id = photo.file_unique_id
 
-            await file.download_to_drive(file_path)
+    # Si ya fue guardada, saltar
+    if unique_id in context.user_data['fotos']:
+        await update.message.reply_text("ℹ️ Esta foto ya fue procesada.")
+        return SELECTING_PHOTOS
 
-            context.user_data['fotos'][unique_id] = {
-                "file_id": photo.file_id,
-                "file_path": file_path
-            }
-            new_photos.append(file_name)
-        except Exception as e:
-            logger.error(f"Error al descargar foto {unique_id}: {str(e)}")
-            continue
+    try:
+        file = await context.bot.get_file(photo.file_id)
+        file_name = f"{unique_id}.jpg"
+        file_path = os.path.join(photo_dir, file_name)
+
+        await file.download_to_drive(file_path)
+
+        context.user_data['fotos'][unique_id] = {
+            "file_id": photo.file_id,
+            "file_path": file_path
+        }
+        new_photos.append(file_name)
+
+    except Exception as e:
+        logger.error(f"Error al descargar foto {unique_id}: {str(e)}")
 
     if new_photos:
-        await update.message.reply_text(f"📥 {len(new_photos)} nueva(s) foto(s) descargada(s).")
+        await update.message.reply_text(f"📥 {len(new_photos)} foto(s) descargada(s).")
     else:
         await update.message.reply_text("ℹ️ No se han añadido nuevas fotos.")
 
