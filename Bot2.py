@@ -22,9 +22,34 @@ from datetime import datetime
 import pandas as pd
 import os
 
-PHOTO_DIR = r"C:\Users\Especialista de Data\Documents\Bot_telegram\fotos_prueba"
+PHOTO_DIR = r"\\LAPTOP-HUI4E4B7\Users\sisa4\Desktop\Fotos"
 os.makedirs(PHOTO_DIR, exist_ok=True)
 
+def generate_photo_path(context):
+    depto = context.user_data.get('departamento', 'Sin_Departamento')
+    ciudad = context.user_data.get('ciudad', 'Sin_Ciudad')
+    poi = context.user_data.get('punto_interes', 'Sin_PuntoInteres')
+    cliente = context.user_data.get('cliente', 'Sin_Cliente')
+    fecha = datetime.now().strftime("%Y-%m-%d")
+
+    def sanitize(name):
+        return name.replace("/", "_").replace("\\", "_").replace(":", "_").strip()
+
+    depto = sanitize(depto)
+    ciudad = sanitize(ciudad)
+    poi = sanitize(poi)
+    cliente = sanitize(cliente)
+
+    full_path = os.path.join(
+        PHOTO_DIR,
+        depto,
+        ciudad,
+        poi,
+        cliente,
+        fecha
+    )
+    os.makedirs(full_path, exist_ok=True)
+    return full_path
 
 #===========================================================================================================================================================================
 # ======================================================================== CONFIGURACIÓN DEL LOGGING =======================================================================
@@ -401,38 +426,36 @@ async def handle_photos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     if not update.message.photo:
         await update.message.reply_text("Por favor, envía una o más fotos.")
         return SELECTING_PHOTOS
-
+    
     if 'fotos' not in context.user_data:
         context.user_data['fotos'] = {}
-
+    
     new_photos = []
+
+    try:
+        photo_dir = generate_photo_path(context)
+    except Exception as e:
+        logger.error(f"Error al generar la ruta de fotos: {str(e)}")
+        await update.message.reply_text("⚠️ Error al preparar la carpeta destino. Usa /start")
+        return SELECTING_PHOTOS
 
     for photo in update.message.photo:
         unique_id = photo.file_unique_id
-
-        # Si ya fue guardada, saltar
         if unique_id in context.user_data['fotos']:
             continue
-
+        
         try:
-            # Seleccionar la foto de mayor resolución (última en la lista)
             file = await context.bot.get_file(photo.file_id)
+            file_name = f"{unique_id}.jpg"
+            file_path = os.path.join(photo_dir, file_name)
 
-            # Definir ruta local
-            file_name = f"{unique_id}.jpg"  # Puedes usar .jpeg o .png también
-            file_path = os.path.join(PHOTO_DIR, file_name)
-
-            # Descargar foto
             await file.download_to_drive(file_path)
 
-            # Guardar datos
             context.user_data['fotos'][unique_id] = {
                 "file_id": photo.file_id,
                 "file_path": file_path
             }
-
             new_photos.append(file_name)
-
         except Exception as e:
             logger.error(f"Error al descargar foto {unique_id}: {str(e)}")
             continue
